@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snooker Live Scoreboard</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font family -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Dark background for snooker theme */
+        }
+        /* Custom button colors/styles */
+        .score-btn {
+            /* Increased transition duration for smoother hover/active effects */
+            @apply p-4 rounded-lg text-white font-bold text-lg shadow-md transition duration-300 hover:shadow-xl hover:scale-[1.03] active:scale-[0.98];
+        }
+        .action-btn {
+            /* Increased transition duration for smoother hover/active effects */
+            @apply p-3 rounded-lg text-white font-semibold transition duration-300 shadow-md hover:shadow-xl hover:scale-[1.01] active:scale-[0.99];
+        }
+        /* Styles for the custom modals */
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.75);
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            animation: zoomIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes zoomIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        /* === App Load Animation === */
+        @keyframes fadeInSlideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .app-loaded {
+            animation: fadeInSlideUp 0.8s ease-out forwards;
+        }
+
+        /* === Blinking Live Text === */
+        .blinking-live {
+            animation: pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            color: #ef4444; /* text-red-500 */
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        /* ======================== */
+
+        /* Specific colors for snooker points */
+        .bg-brown-600 { background-color: #a52a2a; }
+        .hover\:bg-brown-500:hover { background-color: #c04040; }
+        .bg-pink-600 { background-color: #ff69b4; }
+        .hover\:bg-pink-500:hover { background-color: #ff85c1; }
+
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-8 text-gray-100">
+
+    <div id="loading-indicator" class="text-center p-8">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-green-500 mx-auto"></div>
+        <p class="mt-4 text-lg">Initializing Live Score System...</p>
+    </div>
+
+    <!-- Main Application Wrapper -->
+    <div id="app" class="max-w-4xl mx-auto hidden">
+        
+        <!-- ============================================== -->
+        <!-- PUBLIC VIEW: ALWAYS VISIBLE SCOREBOARD CONTENT -->
+        <!-- ============================================== -->
+        <div id="public-scoreboard">
+            <header class="text-center mb-6">
+                <h1 class="text-4xl font-extrabold text-green-400 tracking-tight">A3 Snooker Tournament Live Scoring</h1>
+                <p class="text-xl mt-2 text-gray-400">Current Match: <span id="current-match-display">Loading...</span></p>
+                <!-- NEW: Group Display -->
+                <p id="group-display-container" class="text-lg mt-1 font-semibold text-gray-300 hidden">Group: <span id="current-group-display" class="text-yellow-400">...</span></p>
+            </header>
+            
+            <!-- Main Scoreboard -->
+            <div class="bg-[#161b22] p-6 rounded-xl shadow-2xl border border-gray-700">
+                <!-- UPDATED: Added blinking-live class -->
+                <h2 class="text-2xl font-bold mb-4 border-b pb-2 border-gray-700 text-center blinking-live">LIVE FRAME SCORE</h2>
+
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    
+                    <!-- Player 1 Score Card -->
+                    <div class="p-4 rounded-lg transition-all duration-300 transform" id="player1-card">
+                        <p class="text-xs uppercase tracking-wider text-gray-400">Frames Won</p>
+                        <p id="player1-frames" class="text-4xl font-extrabold text-green-400 mt-1 transition-all duration-300">0</p>
+                        <p id="player1-name" class="text-xl font-semibold mt-4">Player 1</p>
+                        <p class="text-sm uppercase tracking-wider text-gray-400 mt-2">Current Points</p>
+                        <p id="player1-score" class="text-6xl font-black mt-1 transition-all duration-300">0</p>
+                    </div>
+
+                    <!-- Player 2 Score Card -->
+                    <div class="p-4 rounded-lg transition-all duration-300 transform" id="player2-card">
+                        <p class="text-xs uppercase tracking-wider text-gray-400">Frames Won</p>
+                        <p id="player2-frames" class="text-4xl font-extrabold text-green-400 mt-1 transition-all duration-300">0</p>
+                        <p id="player2-name" class="text-xl font-semibold mt-4">Player 2</p>
+                        <p class="text-sm uppercase tracking-wider text-gray-400 mt-2">Current Points</p>
+                        <p id="player2-score" class="text-6xl font-black mt-1 transition-all duration-300">0</p>
+                    </div>
+                </div>
+
+                <!-- Match Info Bar -->
+                <div class="mt-6 pt-4 border-t border-gray-700 text-center">
+                    
+                    <!-- Match Indicators: Current Player Turn and Next Match Opponents -->
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <!-- Current Player (On Break) -->
+                        <div class="p-2 bg-green-900/50 rounded-lg shadow-inner border border-green-500/50 transition-all duration-300">
+                            <p class="text-sm uppercase tracking-widest text-green-300">Current Player (On Break)</p>
+                            <p id="current-player-on-break" class="text-2xl font-extrabold text-green-400 mt-1 uppercase transition-all duration-300">...</p>
+                        </div>
+                        <!-- Next Match Players (Tournament Queue) -->
+                        <div class="p-2 bg-blue-900/50 rounded-lg shadow-inner border border-blue-500/50 transition-all duration-300">
+                            <p class="text-sm uppercase tracking-widest text-blue-300">Next Match Players (Reference)</p>
+                            <p id="next-match-players" class="text-xl font-extrabold text-blue-400 mt-1 uppercase transition-all duration-300">N/A</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Highest Break and Player combined -->
+                    <p class="text-lg font-medium text-gray-300 transition-all duration-300">Highest Break: 
+                        <span id="highest-break" class="text-yellow-400 font-bold transition-all duration-300">0</span> 
+                        (<span id="highest-break-player" class="text-yellow-400 transition-all duration-300">N/A</span>)
+                    </p>
+                    
+                    <!-- Current Break -->
+                    <p class="text-xl font-bold mt-2 text-blue-400 transition-all duration-300">Current Break: <span id="current-break" class="transition-all duration-300">0</span></p>
+
+                    <!-- Last Frame Winner -->
+                    <p class="text-lg font-medium text-gray-300 mt-2 transition-all duration-300">Last Frame Winner: <span id="last-frame-winner" class="text-green-400 font-bold transition-all duration-300">N/A</span></p>
+                </div>
+                
+                <!-- Frame History Section -->
+                <div id="frame-history-container" class="mt-6 pt-4 border-t border-gray-700">
+                    <h3 class="text-lg font-bold text-gray-300 mb-2 text-center">FRAME HISTORY</h3>
+                    <ul id="frame-winners-list" class="flex flex-wrap justify-center text-sm text-gray-400">
+                        <!-- List items will be injected here by JavaScript -->
+                    </ul>
+                </div>
+                
+                <!-- Discrete Admin Login Link -->
+                <footer id="admin-login-link-container" class="mt-4 pt-3 text-center border-t border-gray-800">
+                    <a href="#" onclick="openLoginModal(event)" class="text-xs text-gray-500 hover:text-red-400 transition duration-300">
+                        Scorekeeper Login
+                    </a>
+                </footer>
+            </div>
+            
+            <!-- Custom Design/Credit Footer (UPDATED NAME) -->
+            <div class="mt-6 text-center text-sm text-gray-400">
+                Design & Code by <a href="https://gravatar.com/maazalam04?utm_source=hovercard" target="_blank" class="text-blue-400 hover:text-blue-300 font-semibold transition duration-300 border-b border-dashed border-blue-400 pb-0.5">Md Maaz Alam</a>
+            </div>
+            <!-- END Custom Design/Credit Footer -->
+        </div>
+        <!-- ============================================== -->
+        <!-- END PUBLIC VIEW -->
+        <!-- ============================================== -->
+
+
+        <!-- ============================================== -->
+        <!-- SCOREKEEPER CONTROLS (ADMIN PANEL) - HIDDEN BY DEFAULT -->
+        <!-- ============================================== -->
+        <div id="scorekeeper-controls-wrapper" class="mt-8 hidden">
+        
+            <!-- Match Management Panel -->
+            <div class="mt-8 bg-[#251b32] p-6 rounded-xl shadow-2xl border border-purple-700">
+                <h3 class="text-xl font-bold text-purple-300 mb-4 text-center">MATCH MANAGEMENT & NAMES</h3>
+                
+                <!-- Player Rename Section -->
+                <div class="mb-6 pb-4 border-b border-purple-800">
+                    <h4 class="text-lg font-semibold text-gray-300 mb-2">Rename Current Players</h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="rename-p1-input" class="block text-sm font-medium text-gray-400">Player 1 (Left Side):</label>
+                            <input type="text" id="rename-p1-input" placeholder="e.g., Md Maaz Alam" class="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-purple-500 focus:border-purple-500 transition duration-300">
+                        </div>
+                        <div>
+                            <label for="rename-p2-input" class="block text-sm font-medium text-gray-400">Player 2 (Right Side):</label>
+                            <input type="text" id="rename-p2-input" placeholder="e.g., Tarique Anwar" class="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-purple-500 focus:border-purple-500 transition duration-300">
+                        </div>
+                    </div>
+                    <button onclick="handleRenameCurrentPlayers()" class="action-btn w-full bg-purple-600 hover:bg-purple-500 mt-3">Update Current Player Names</button>
+                </div>
+
+                <!-- NEW: Manual Highest Break Section -->
+                <div class="mb-6 pb-4 border-b border-purple-800">
+                    <h4 class="text-lg font-semibold text-gray-300 mb-2">Manual Highest Break</h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="manual-highest-break-score" class="block text-sm font-medium text-gray-400">Break Score:</label>
+                            <input type="number" id="manual-highest-break-score" placeholder="e.g., 147" class="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-purple-500 focus:border-purple-500 transition duration-300">
+                        </div>
+                        <div>
+                            <label for="manual-highest-break-name" class="block text-sm font-medium text-gray-400">Player Name:</label>
+                            <input type="text" id="manual-highest-break-name" placeholder="Enter player name" class="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-purple-500 focus:border-purple-500 transition duration-300">
+                        </div>
+                    </div>
+                    <button onclick="handleManualHighestBreak()" class="action-btn w-full bg-yellow-600 hover:bg-yellow-500 mt-3">Update Highest Break</button>
+                </div>
+
+                <!-- Next Frame Queue Section -->
+                <div>
+                    <h4 class="text-lg font-semibold text-gray-300 mb-2">Who is Playing Next Frame (Reference Queue)</h4>
+                    <p class="text-sm text-gray-400 mb-2">Enter the entire queue here, separated by commas. The first two names will appear as the "Next Match Players" indicator on the public scoreboard.</p>
+                    <textarea id="input-player-queue" rows="3" placeholder="Example: Shyam, Hari, Player5, Player6, ..." class="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-yellow-500 focus:border-yellow-500 transition duration-300"></textarea>
+                    <button onclick="handleUpdatePlayerQueue()" class="action-btn w-full bg-teal-600 hover:bg-teal-500 mt-3">Update Reference Queue</button>
+                    <p id="queue-error" class="text-red-500 text-sm mt-2 hidden"></p>
+                </div>
+                
+                <!-- UPDATED: Add Group Section (Dropdown) -->
+                <div class="mt-6 pt-4 border-t border-purple-800">
+                    <h4 class="text-lg font-semibold text-gray-300 mb-2">Update Current Group / Stage</h4>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <select id="input-current-group" class="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-purple-500 focus:border-purple-500 transition duration-300">
+                            <option value="Group A">Group A</option>
+                            <option value="Group B">Group B</option>
+                            <option value="Group C">Group C</option>
+                            <option value="Group D">Group D</option>
+                            <option value="Quarter-Final">Quarter-Final</option>
+                            <option value="Semi-Final">Semi-Final</option>
+                            <option value="Final">Final</option>
+                        </select>
+                        <button onclick="handleUpdateGroup()" class="action-btn bg-purple-600 hover:bg-purple-500 whitespace-nowrap">Update Group</button>
+                    </div>
+                </div>
+
+            </div>
+            
+            <!-- Scoring and Match Actions Panel -->
+            <div class="mt-8 bg-[#161b22] p-6 rounded-xl shadow-2xl border border-gray-700">
+                <h3 class="text-xl font-bold text-red-400 mb-4 text-center">SCOREKEEPER CONTROLS</h3>
+                <div id="turn-indicator" class="text-center mb-6 text-lg font-semibold text-gray-300">
+                    Turn: <span id="current-player-turn" class="text-green-400">Loading...</span>
+                </div>
+
+                <!-- Scoring Buttons -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <!-- Points -->
+                    <button onclick="handleScoreUpdate(1)" class="score-btn bg-gray-600 hover:bg-gray-500">1 (Foul)</button>
+                    <button onclick="handleScoreUpdate(2)" class="score-btn bg-red-600 hover:bg-red-500">2 (Foul)</button>
+                    <button onclick="handleScoreUpdate(3)" class="score-btn bg-yellow-600 hover:bg-yellow-500">3</button>
+                    <button onclick="handleScoreUpdate(4)" class="score-btn bg-green-600 hover:bg-green-500">4</button>
+                    <button onclick="handleScoreUpdate(5)" class="score-btn bg-brown-600 hover:bg-brown-500">5</button>
+                    <button onclick="handleScoreUpdate(6)" class="score-btn bg-blue-600 hover:bg-blue-500">6</button>
+                    <button onclick="handleScoreUpdate(7)" class="score-btn bg-pink-600 hover:bg-pink-500">7</button>
+                    <button onclick="handleScoreUpdate(8)" class="score-btn bg-black hover:bg-black/80 text-white">8 (Black)</button>
+                </div>
+
+                <!-- Match Actions - Updated Turn Control Buttons -->
+                <div class="mt-6 grid grid-cols-2 gap-4 border-t pt-4 border-gray-700">
+                    <button onclick="handleUndoLastAction()" class="action-btn bg-red-500 hover:bg-red-400">Undo Last Shot</button>
+                    
+                    <!-- COMBINED ACTION BUTTON -->
+                    <button onclick="handleTurnAction()" class="action-btn 
+                        bg-indigo-700 hover:bg-indigo-600 
+                        shadow-indigo-500/50 hover:shadow-indigo-500/70 
+                        text-xl font-black transform hover:scale-[1.02] transition-all duration-300">
+                        End Shot / Turn Action
+                    </button>
+                </div>
+                 <div class="mt-4 grid grid-cols-2 gap-4">
+                    <button onclick="handleFrameEnd()" class="action-btn bg-green-700 hover:bg-green-600">End Frame</button>
+                    <button onclick="handleResetTournament()" class="action-btn bg-gray-600 hover:bg-gray-500">Reset Tournament</button>
+                </div>
+            </div>
+        </div>
+        <!-- ============================================== -->
+        <!-- END SCOREKEEPER CONTROLS -->
+        <!-- ============================================== -->
+
+        
+        <!-- Custom Modal/Dialog for SCOREKEEPER LOGIN -->
+        <div id="login-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+            <div class="modal-content bg-gray-800 p-8 rounded-xl shadow-2xl border-4 border-red-600 w-full max-w-sm mx-4">
+                <h3 class="text-xl font-bold text-red-400 mb-4 text-center">SCOREKEEPER LOGIN</h3>
+                <p class="text-gray-400 mb-4 text-center">Enter the Scorekeeping Credentials to enable controls.</p>
+                <div class="flex flex-col space-y-3">
+                    <!-- NEW INPUT FIELD FOR USER ID -->
+                    <input type="text" id="admin-user-id-input" placeholder="Enter User ID (maazalam04)" class="w-full p-3 rounded-lg bg-gray-900 border border-gray-700 text-white focus:ring-red-500 focus:border-red-500 transition duration-300">
+                    
+                    <!-- EXISTING FIELD RENAMED TO PASSWORD -->
+                    <input type="password" id="admin-key-input" placeholder="Enter Password" class="w-full p-3 rounded-lg bg-gray-900 border border-gray-700 text-white focus:ring-red-500 focus:border-red-500 transition duration-300">
+                    <button onclick="authenticateScorekeeper()" class="action-btn bg-red-600 hover:bg-red-500">Unlock Controls</button>
+                </div>
+                <p id="auth-message" class="mt-3 text-red-500 text-center hidden"></p>
+                <button onclick="closeLoginModal()" class="action-btn w-full bg-gray-600 hover:bg-gray-500 mt-4">Cancel</button>
+            </div>
+        </div>
+
+
+        <!-- Custom Modal/Dialog for Turn Action -->
+        <div id="turn-action-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+            <div class="modal-content bg-gray-800 p-8 rounded-xl shadow-2xl border-4 border-indigo-600 w-full max-w-sm mx-4">
+                <h3 class="text-xl font-bold text-indigo-300 mb-4 text-center">Select Turn Outcome</h3>
+                <p class="text-gray-400 mb-6 text-center">What is the result of the current player's shot?</p>
+                <div class="space-y-4">
+                    <button onclick="handleFoulAndSwitchTurn()" class="action-btn w-full bg-red-700 hover:bg-red-600 text-lg">
+                        Foul / Miss (Switch Turn)
+                    </button>
+                    <button onclick="handleClearBreakAndKeepTurn()" class="action-btn w-full bg-yellow-700 hover:bg-yellow-600 text-lg">
+                        End Break (Keep Turn)
+                    </button>
+                    <button onclick="closeTurnActionModal()" class="action-btn w-full bg-gray-600 hover:bg-gray-500 mt-4">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- NEW: Custom Modal/Dialog for Re-Spot Tie Breaker -->
+        <div id="re-spot-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+            <div class="modal-content bg-gray-800 p-8 rounded-xl shadow-2xl border-4 border-yellow-500 w-full max-w-sm mx-4">
+                <h3 class="text-xl font-bold text-yellow-300 mb-4 text-center">Frame Tied (Re-Spot)</h3>
+                <p class="text-gray-400 mb-6 text-center">The frame is tied. Who won the re-spotted black?</p>
+                <div class="space-y-4">
+                    <button id="re-spot-winner-p1" onclick="handleReSpotWinner('Player 1')" class="action-btn w-full bg-green-700 hover:bg-green-600 text-lg">
+                        (Player 1 Name)
+                    </button>
+                    <button id="re-spot-winner-p2" onclick="handleReSpotWinner('Player 2')" class="action-btn w-full bg-blue-700 hover:bg-blue-600 text-lg">
+                        (Player 2 Name)
+                    </button>
+                    <button onclick="closeReSpotModal()" class="action-btn w-full bg-gray-600 hover:bg-gray-500 mt-4">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase Script Module -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Set Firestore log level for debugging
+        setLogLevel('Debug');
+
+        // --- GLOBAL CANVAS/FIREBASE VARIABLES ---
+        // These variables are expected to be injected by the hosting environment.
+        // For local development or self-hosting, you MUST replace them with your actual Firebase config.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // Use a default for local testing
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // ---------------------------------------
+
+        // --- !! IMPORTANT FOR SELF-HOSTING / VERCEL !! ---
+        // If __firebase_config is '{}' (i.e., not injected), use your local config.
+        // REPLACE the empty object {} with your actual Firebase project configuration.
+        const LOCAL_FIREBASE_CONFIG = {
+             apiKey: "YOUR_API_KEY",
+             authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+             projectId: "YOUR_PROJECT_ID",
+             storageBucket: "YOUR_PROJECT_ID.appspot.com",
+             messagingSenderId: "YOUR_SENDER_ID",
+             appId: "YOUR_APP_ID"
+        };
+        
+        const finalFirebaseConfig = (Object.keys(firebaseConfig).length > 0) ? firebaseConfig : LOCAL_FIREBASE_CONFIG;
+        // -----------------------------------------------
+
+
+        let db, auth;
+        let userId = null;
+        let isAuthReady = false;
+        
+        // Match document reference for the current tournament match
+        const MATCH_DOC_PATH = `/artifacts/${appId}/public/data/snooker_matches/current_match`;
+
+        // Default Match Data - Player names are now only updated via full reset or rename box
+        const DEFAULT_MATCH_DATA = {
+            player1Name: "Player 1",
+            player2Name: "Player 2",
+            player1Score: 0,
+            player2Score: 0,
+            player1Frames: 0,
+            player2Frames: 0,
+            currentBreak: 0,
+            highestBreak: 0, 
+            highestBreakPlayerName: 'N/A',
+            lastFrameWinner: 'N/A',     
+            currentTurn: 'Player 1', 
+            frameWinnersHistory: [],
+            actionLog: [],
+            playerQueue: ["Player 3", "Player 4", "Player 5", "Player 6"], 
+            currentGroup: "Group A", // NEW: Added default group
+        };
+
+        // --- SCOREKEEPER SECURITY CONFIG (UPDATED) ---
+        const ADMIN_USER_ID = 'maazalam04'; // New User ID
+        const ADMIN_PASSWORD = 'Maaz@2004'; // New Password
+        // ---------------------------------------------
+        
+        // Utility function for exponential backoff retry
+        const fetchWithRetry = async (fn, maxRetries = 5) => {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    return await fn();
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        console.error("Max retries reached. Failed to execute function.", error);
+                        throw error;
+                    }
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        };
+
+        // --- 1. FIREBASE INITIALIZATION AND AUTHENTICATION ---
+        async function initFirebase() {
+            try {
+                if (Object.keys(finalFirebaseConfig).length === 0 || !finalFirebaseConfig.apiKey) {
+                    console.error("Firebase config is empty. Cannot initialize.");
+                    document.getElementById('loading-indicator').innerHTML = '<p class="text-red-500">Error: Firebase configuration missing. Please add your Firebase project config to the LOCAL_FIREBASE_CONFIG variable in inde.html.</p>';
+                    return;
+                }
+
+                const app = initializeApp(finalFirebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Authenticated with UID:", userId);
+                        isAuthReady = true;
+                        
+                        await initializeMatchData();
+                        setupRealtimeListener();
+                        
+                        document.getElementById('loading-indicator').classList.add('hidden');
+                        
+                        // NEW: Apply animation class to trigger the smooth fade-in
+                        const appElement = document.getElementById('app');
+                        appElement.classList.remove('hidden');
+                        appElement.classList.add('app-loaded'); 
+
+                        checkLocalAuth();
+
+                    } else {
+                        // Use injected token if available (for Canvas environment)
+                        // Otherwise, sign in anonymously (for Vercel/public deployment)
+                        if (initialAuthToken) {
+                            await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
+                        } else {
+                            await fetchWithRetry(() => signInAnonymously(auth));
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error("Error during Firebase initialization or sign-in:", error);
+                document.getElementById('loading-indicator').innerHTML = `<p class="text-red-500">Initialization Error: ${error.message}</p>`;
+            }
+        }
+
+        // --- SCOREKEEPER AUTHENTICATION FUNCTIONS ---
+        
+        // Handles the visibility of the admin controls
+        function checkLocalAuth() {
+            const isAuthorized = localStorage.getItem('scorekeeper_authorized') === 'true';
+            const controlsWrapper = document.getElementById('scorekeeper-controls-wrapper');
+            const loginLinkContainer = document.getElementById('admin-login-link-container');
+
+            if (isAuthorized) {
+                controlsWrapper.classList.remove('hidden');
+                loginLinkContainer.classList.add('hidden');
+            } else {
+                controlsWrapper.classList.add('hidden');
+                loginLinkContainer.classList.remove('hidden');
+            }
+        }
+        
+        // Opens the login modal
+        window.openLoginModal = (event) => {
+            event.preventDefault(); // Prevent page jump
+            document.getElementById('login-modal').classList.remove('hidden');
+            document.getElementById('admin-user-id-input').focus();
+        }
+        
+        // Closes the login modal
+        window.closeLoginModal = () => {
+             document.getElementById('login-modal').classList.add('hidden');
+             document.getElementById('admin-user-id-input').value = ''; // Clear User ID input
+             document.getElementById('admin-key-input').value = ''; // Clear Password input
+             document.getElementById('auth-message').classList.add('hidden');
+        }
+
+        // AUTHENTICATION LOGIC UPDATED TO CHECK BOTH USER ID AND PASSWORD
+        window.authenticateScorekeeper = () => {
+            const userIdInput = document.getElementById('admin-user-id-input');
+            const passwordInput = document.getElementById('admin-key-input');
+            const message = document.getElementById('auth-message');
+            
+            const userId = userIdInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            if (userId === ADMIN_USER_ID && password === ADMIN_PASSWORD) {
+                localStorage.setItem('scorekeeper_authorized', 'true');
+                message.classList.add('hidden');
+                closeLoginModal(); // Close the modal on success
+                checkLocalAuth();
+            } else {
+                message.textContent = 'Invalid User ID or Password. Please try again.';
+                message.classList.remove('hidden');
+                userIdInput.value = ''; // Clear both inputs
+                passwordInput.value = '';
+            }
+        };
+
+
+        // --- 2. MATCH DATA INITIALIZATION ---
+        async function initializeMatchData() {
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const matchSnap = await fetchWithRetry(() => getDoc(matchRef));
+
+            if (!matchSnap.exists()) {
+                console.log("Match data not found. Creating default tournament data.");
+                await fetchWithRetry(() => setDoc(matchRef, DEFAULT_MATCH_DATA));
+            } else {
+                // Ensure default names and queue are present if they were missing (e.g., from an older schema)
+                const data = matchSnap.data();
+                const updates = {};
+                if (data.player1Name === undefined) updates.player1Name = DEFAULT_MATCH_DATA.player1Name;
+                if (data.player2Name === undefined) updates.player2Name = DEFAULT_MATCH_DATA.player2Name;
+                if (data.playerQueue === undefined) updates.playerQueue = DEFAULT_MATCH_DATA.playerQueue;
+                if (data.currentGroup === undefined) updates.currentGroup = DEFAULT_MATCH_DATA.currentGroup; // NEW: Check for group
+
+                if (Object.keys(updates).length > 0) {
+                     await fetchWithRetry(() => updateDoc(matchRef, updates));
+                }
+            }
+        }
+
+        // --- 3. REAL-TIME LISTENER AND UI UPDATES ---
+        function setupRealtimeListener() {
+            if (!db || !isAuthReady) return;
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+
+            onSnapshot(matchRef, (doc) => {
+                if (doc.exists()) {
+                    const data = doc.data();
+                    
+                    updateUI(data);
+                    
+                    // Update admin UI inputs only if authenticated
+                    if (localStorage.getItem('scorekeeper_authorized') === 'true') {
+                        const renameP1Input = document.getElementById('rename-p1-input');
+                        const renameP2Input = document.getElementById('rename-p2-input');
+                        const queueInput = document.getElementById('input-player-queue');
+                        const groupInput = document.getElementById('input-current-group'); // NEW: Get group input
+                        // NEW: Get manual break inputs
+                        const manualBreakScoreInput = document.getElementById('manual-highest-break-score');
+                        const manualBreakNameInput = document.getElementById('manual-highest-break-name');
+                        
+                        if (renameP1Input) renameP1Input.value = data.player1Name || '';
+                        if (renameP2Input) renameP2Input.value = data.player2Name || '';
+                        if (queueInput) queueInput.value = (data.playerQueue || []).join(', ');
+                        if (groupInput) groupInput.value = data.currentGroup || ''; // NEW: Populate group input
+                        // NEW: Populate manual break inputs
+                        if (manualBreakScoreInput) manualBreakScoreInput.value = data.highestBreak || 0;
+                        if (manualBreakNameInput) manualBreakNameInput.value = data.highestBreakPlayerName || 'N/A';
+                    }
+
+                } else {
+                    console.log("No match document found, UI won't update.");
+                }
+            }, (error) => {
+                console.error("Error setting up real-time listener:", error);
+            });
+        }
+
+        function updateUI(data) {
+            const p1Name = data.player1Name || 'N/A';
+            const p2Name = data.player2Name || 'N/A';
+            
+            // Update names and frame scores
+            document.getElementById('player1-name').textContent = p1Name;
+            document.getElementById('player2-name').textContent = p2Name;
+            document.getElementById('player1-frames').textContent = data.player1Frames;
+            document.getElementById('player2-frames').textContent = data.player2Frames;
+            document.getElementById('current-match-display').textContent = `${p1Name} vs ${p2Name}`;
+
+            // NEW: Update Group Display
+            const groupDisplay = document.getElementById('current-group-display');
+            const groupContainer = document.getElementById('group-display-container');
+            if (data.currentGroup && data.currentGroup.trim() !== '') {
+                groupDisplay.textContent = data.currentGroup;
+                groupContainer.classList.remove('hidden');
+            } else {
+                groupContainer.classList.add('hidden');
+            }
+
+            // Update current points
+            document.getElementById('player1-score').textContent = data.player1Score;
+            document.getElementById('player2-score').textContent = data.player2Score;
+
+            // Update high breaks and break player
+            document.getElementById('highest-break').textContent = data.highestBreak;
+            document.getElementById('highest-break-player').textContent = data.highestBreakPlayerName || 'N/A';
+            document.getElementById('current-break').textContent = data.currentBreak;
+            document.getElementById('last-frame-winner').textContent = data.lastFrameWinner || 'N/A';
+            
+            // Highlight the player whose turn it is
+            const card1 = document.getElementById('player1-card');
+            const card2 = document.getElementById('player2-card');
+            const turnIndicator = document.getElementById('current-player-turn');
+            const currentPlayerOnBreakIndicator = document.getElementById('current-player-on-break');
+            
+            // Ensure smooth transition for highlight change
+            card1.classList.remove('bg-green-800/50', 'ring-2', 'ring-green-400');
+            card2.classList.remove('bg-green-800/50', 'ring-2', 'ring-green-400');
+            
+            let playerNameOnBreak;
+
+            if (data.currentTurn === 'Player 1') {
+                // The 'transition-all duration-300' class in HTML handles the smooth visual change here
+                card1.classList.add('bg-green-800/50', 'ring-2', 'ring-green-400'); 
+                if (turnIndicator) turnIndicator.textContent = p1Name;
+                playerNameOnBreak = p1Name;
+            } else {
+                card2.classList.add('bg-green-800/50', 'ring-2', 'ring-green-400');
+                if (turnIndicator) turnIndicator.textContent = p2Name;
+                playerNameOnBreak = p2Name;
+            }
+            
+            if (currentPlayerOnBreakIndicator) {
+                currentPlayerOnBreakIndicator.textContent = playerNameOnBreak;
+            }
+            
+            // --- Next Match Players (Tournament Queue - Reference Only) ---
+            const queue = data.playerQueue || [];
+            const nextP1 = queue[0];
+            const nextP2 = queue[1];
+            const nextMatchPlayersIndicator = document.getElementById('next-match-players');
+
+            if (nextMatchPlayersIndicator) {
+                if (nextP1 && nextP2) {
+                    nextMatchPlayersIndicator.textContent = `${nextP1} vs ${nextP2}`;
+                    nextMatchPlayersIndicator.classList.remove('text-red-400');
+                    nextMatchPlayersIndicator.classList.add('text-blue-400');
+                } else if (queue.length > 0 && queue.length < 2) {
+                    nextMatchPlayersIndicator.textContent = 'NEEDS 2 PLAYERS';
+                    nextMatchPlayersIndicator.classList.remove('text-blue-400');
+                    nextMatchPlayersIndicator.classList.add('text-red-400');
+                } else {
+                     nextMatchPlayersIndicator.textContent = 'N/A (Queue Empty)';
+                     nextMatchPlayersIndicator.classList.remove('text-red-400');
+                     nextMatchPlayersIndicator.classList.add('text-blue-400');
+                }
+            }
+            // --------------------------------------------
+
+            // Update frame history list
+            const historyList = document.getElementById('frame-winners-list');
+            if (historyList) {
+                historyList.innerHTML = ''; 
+                if (data.frameWinnersHistory && data.frameWinnersHistory.length > 0) {
+                    data.frameWinnersHistory.forEach((entry, index) => {
+                        const li = document.createElement('li');
+                        // Added animation classes for history items
+                        li.className = 'px-2 py-1 m-1 bg-gray-700/50 rounded-md font-medium text-xs sm:text-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-500'; 
+                        li.textContent = `F${index + 1}: ${entry}`;
+                        historyList.appendChild(li);
+                    });
+                } else {
+                    historyList.innerHTML = '<li class="text-gray-500 italic mt-1">No frames completed yet for this match.</li>';
+                }
+            }
+        }
+
+
+        // --- 4. SCOREKEEPER FUNCTIONS (GLOBAL FOR BUTTONS) ---
+        
+        // --- CUSTOM MODAL FUNCTIONS ---
+        function openTurnActionModal() {
+            document.getElementById('turn-action-modal').classList.remove('hidden');
+        }
+
+        window.closeTurnActionModal = () => {
+            document.getElementById('turn-action-modal').classList.add('hidden');
+        };
+
+        // NEW: Re-Spot Modal Functions
+        async function openReSpotModal() {
+            // Get current player names to populate buttons
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const matchSnap = await fetchWithRetry(() => getDoc(matchRef));
+            if (!matchSnap.exists()) return;
+            const data = matchSnap.data();
+
+            document.getElementById('re-spot-winner-p1').textContent = data.player1Name || 'Player 1';
+            document.getElementById('re-spot-winner-p2').textContent = data.player2Name || 'Player 2';
+            document.getElementById('re-spot-modal').classList.remove('hidden');
+        }
+
+        window.closeReSpotModal = () => {
+            document.getElementById('re-spot-modal').classList.add('hidden');
+        };
+
+        // NEW FUNCTION: Handles the click on the combined button
+        window.handleTurnAction = () => {
+             if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') {
+                console.error("Authentication required to perform turn actions.");
+                return;
+             }
+             openTurnActionModal();
+        };
+
+        // NEW LOGIC 1: Foul / Miss (Switch Turn)
+        window.handleFoulAndSwitchTurn = async () => {
+            if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+            closeTurnActionModal(); 
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const matchSnap = await fetchWithRetry(() => getDoc(matchRef));
+            if (!matchSnap.exists()) return;
+
+            const data = matchSnap.data();
+            const nextTurn = data.currentTurn === 'Player 1' ? 'Player 2' : 'Player 1';
+            
+            // Switch turn and clear current break
+            const updates = {
+                currentTurn: nextTurn,
+                currentBreak: 0 
+            };
+
+            await fetchWithRetry(() => updateDoc(matchRef, updates));
+            console.log(`Turn switched due to foul/miss. Current break cleared to 0.`);
+        };
+        
+        // NEW LOGIC 2: End Break (Clear break but keep turn - e.g., tactical shot, end of balls)
+        window.handleClearBreakAndKeepTurn = async () => {
+            if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+            closeTurnActionModal(); 
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            
+            // Note: Unlike the previous version, we don't ask for confirm() here since the modal serves that purpose.
+            await fetchWithRetry(() => updateDoc(matchRef, {
+                currentBreak: 0 
+            }));
+            console.log(`Current break cleared to 0, turn remains with the same player.`);
+        };
+
+
+        // FUNCTION: Rename the current players without affecting scores/frames
+        window.handleRenameCurrentPlayers = async () => {
+            if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const p1Input = document.getElementById('rename-p1-input').value.trim();
+            const p2Input = document.getElementById('rename-p2-input').value.trim();
+
+            if (!p1Input || !p2Input) {
+                // Using console log/message update instead of alert
+                console.error("Please enter names for both Player 1 and Player 2.");
+                return;
+            }
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const updates = {
+                player1Name: p1Input,
+                player2Name: p2Input,
+            };
+
+            await fetchWithRetry(() => updateDoc(matchRef, updates));
+            console.log(`Current players renamed to ${p1Input} and ${p2Input}.`);
+        };
+
+        // FUNCTION: To manage the player queue (Only for reference/next match display now)
+        window.handleUpdatePlayerQueue = async () => {
+            if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const input = document.getElementById('input-player-queue').value;
+            const errorElement = document.getElementById('queue-error');
+            
+            // Sanitize and create array: replace newlines with commas, split by comma, trim, filter empty strings
+            const rawPlayers = input.replace(/[\r\n]/g, ',').split(',');
+            const newQueue = rawPlayers.map(name => name.trim()).filter(name => name.length > 0);
+            
+            if (newQueue.length % 2 !== 0 && newQueue.length > 0) {
+                errorElement.textContent = "Warning: The number of players is odd. The last player will be alone.";
+                errorElement.classList.remove('hidden');
+            } else {
+                errorElement.classList.add('hidden');
+            }
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const updates = {
+                playerQueue: newQueue,
+            };
+
+            await fetchWithRetry(() => updateDoc(matchRef, updates));
+            console.log("Reference queue updated.");
+        };
+
+        // NEW: FUNCTION: To update the current group/stage
+        window.handleUpdateGroup = async () => {
+            if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const input = document.getElementById('input-current-group').value.trim();
+            
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const updates = {
+                currentGroup: input,
+            };
+
+            await fetchWithRetry(() => updateDoc(matchRef, updates));
+            console.log("Current group updated to:", input);
+        };
+
+        // NEW: FUNCTION: To manually update the highest break
+        window.handleManualHighestBreak = async () => {
+            if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const scoreInput = document.getElementById('manual-highest-break-score').value;
+            const nameInput = document.getElementById('manual-highest-break-name').value.trim();
+            
+            const score = parseInt(scoreInput, 10);
+
+            if (isNaN(score) || score < 0) {
+                console.error("Invalid highest break score. Must be a positive number.");
+                // TODO: Show an error message to the user? For now, just log.
+                return;
+            }
+            
+            if (!nameInput) {
+                 console.error("Highest break player name cannot be empty.");
+                 return;
+            }
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const updates = {
+                highestBreak: score,
+                highestBreakPlayerName: nameInput,
+            };
+
+            await fetchWithRetry(() => updateDoc(matchRef, updates));
+            console.log("Highest break manually updated to:", score, "by", nameInput);
+        };
+
+        window.handleScoreUpdate = async (points) => {
+            if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const matchSnap = await fetchWithRetry(() => getDoc(matchRef));
+            if (!matchSnap.exists()) return;
+
+            const data = matchSnap.data();
+            
+            const currentPlayerKey = data.currentTurn === 'Player 1' ? 'player1Score' : 'player2Score';
+            const currentPlayerNameKey = data.currentTurn === 'Player 1' ? 'player1Name' : 'player2Name'; 
+            
+            const prevPlayerScore = data[currentPlayerKey]; 
+            const prevBreak = data.currentBreak;           
+
+            const currentBreak = data.currentBreak + points;
+            const newScore = data[currentPlayerKey] + points;
+
+            const newActionLog = [...(data.actionLog || []), {
+                player: data.currentTurn,
+                points: points,
+                prevPlayerScore: prevPlayerScore, 
+                prevBreak: prevBreak,
+            }];
+            if (newActionLog.length > 20) {
+                newActionLog.shift(); 
+            }
+
+            const updates = {
+                [currentPlayerKey]: newScore,
+                currentBreak: currentBreak,
+                actionLog: newActionLog 
+            };
+            
+            // REMOVED: Automatic highest break logic
+            /*
+            if (currentBreak > data.highestBreak) {
+                updates.highestBreak = currentBreak;
+                updates.highestBreakPlayerName = data[currentPlayerNameKey]; 
+            }
+            */
+
+            await fetchWithRetry(() => updateDoc(matchRef, updates));
+        };
+        
+        window.handleUndoLastAction = async () => {
+             if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const matchSnap = await fetchWithRetry(() => getDoc(matchRef));
+            if (!matchSnap.exists()) return;
+
+            const data = matchSnap.data();
+            const actionLog = [...(data.actionLog || [])];
+
+            if (actionLog.length === 0) {
+                // Using console log/message update instead of alert
+                console.error("Cannot undo: The score log is empty.");
+                return;
+            }
+
+            const lastAction = actionLog.pop();
+            const playerKey = lastAction.player === 'Player 1' ? 'player1Score' : 'player2Score';
+
+            const updates = {
+                [playerKey]: lastAction.prevPlayerScore, 
+                currentBreak: lastAction.prevBreak,      
+                actionLog: actionLog,                    
+            };
+
+            await fetchWithRetry(() => updateDoc(matchRef, updates));
+            console.log(`Undo successful: Reversed ${lastAction.points} points for ${lastAction.player}.`);
+        };
+        
+        // NEW: Core logic for ending a frame, moved here to be callable from tie-breaker
+        async function _endFrameWithWinner(winnerPlayerKey, winnerName, data) {
+            const matchRef = doc(db, MATCH_DOC_PATH);
+
+            let winnerFramesKey = (winnerPlayerKey === 'Player 1') ? 'player1Frames' : 'player2Frames';
+
+            const frameScore = `${data.player1Score}-${data.player2Score}`;
+            const winnerEntry = `${winnerName} (${frameScore})`;
+            const newHistory = [...(data.frameWinnersHistory || []), winnerEntry];
+
+            const newFrames = (data[winnerFramesKey] || 0) + 1;
+            
+            const updates = {
+                [winnerFramesKey]: newFrames,
+                player1Score: 0,
+                player2Score: 0,
+                currentBreak: 0,
+                lastFrameWinner: winnerName,
+                frameWinnersHistory: newHistory,
+                actionLog: [],
+                currentTurn: 'Player 1', // Reset turn to Player 1 for the start of the next frame
+            };
+
+            await fetchWithRetry(() => updateDoc(matchRef, updates));
+            console.log(`${winnerName} wins the frame!`);
+        }
+        
+        // UPDATED: handleFrameEnd now checks for ties and opens modal
+        window.handleFrameEnd = async () => {
+             if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const matchSnap = await fetchWithRetry(() => getDoc(matchRef));
+            if (!matchSnap.exists()) return;
+
+            const data = matchSnap.data();
+            
+            if (data.player1Score > data.player2Score) {
+                // Player 1 wins
+                await _endFrameWithWinner('Player 1', data.player1Name, data);
+
+            } else if (data.player2Score > data.player1Score) {
+                // Player 2 wins
+                await _endFrameWithWinner('Player 2', data.player2Name, data);
+
+            } else {
+                 // SCORES ARE TIED
+                 console.log("Frame is tied. Opening re-spot modal.");
+                 openReSpotModal(); // Open the modal instead of logging an error
+                 // return; // Removed the error
+            }
+        };
+
+        // NEW: Function to handle the re-spot winner selection
+        window.handleReSpotWinner = async (winnerPlayerKey) => {
+            if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            const matchSnap = await fetchWithRetry(() => getDoc(matchRef));
+            if (!matchSnap.exists()) return;
+
+            const data = matchSnap.data();
+            const winnerName = (winnerPlayerKey === 'Player 1') ? data.player1Name : data.player2Name;
+
+            // Call the core logic
+            await _endFrameWithWinner(winnerPlayerKey, winnerName, data);
+
+            // Close the modal
+            closeReSpotModal();
+        };
+
+        // Function to reset all scores, frames, and player names
+        window.handleResetTournament = async () => {
+             if (!db || !userId || localStorage.getItem('scorekeeper_authorized') !== 'true') return;
+
+            const matchRef = doc(db, MATCH_DOC_PATH);
+            
+            // Note: Using a custom modal is preferable, but sticking to console log for minimal change.
+            if (!window.confirm("Are you sure you want to completely reset the tournament? This will clear all frames, scores, and reset the current players to the default names (Player 1 and Player 2).")) {
+                return;
+            }
+            
+            // Use DEFAULT_MATCH_DATA to reset all values, including default player names and queue
+            await fetchWithRetry(() => setDoc(matchRef, DEFAULT_MATCH_DATA));
+            console.log("Tournament has been completely reset.");
+            
+        };
+
+        // Initialize on window load
+        window.onload = initFirebase;
+    </script>
+</body>
+</html>
